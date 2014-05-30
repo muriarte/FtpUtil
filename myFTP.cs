@@ -7,6 +7,9 @@ using System.IO;
 
 namespace FtpUtil
 {
+    /// <summary>
+    /// Connect to a FTP server to list, transfer, delete and rename files
+    /// </summary>
     public class myFTP
     {
         public string Server { get; set; }
@@ -35,12 +38,18 @@ namespace FtpUtil
             }
         }
 
-        public List<string> GetFileList(string comodin) {
-            if (comodin.Length > 0 && !comodin.StartsWith("/")) {
-                comodin = "/" + comodin;
+        /// <summary>
+        /// Obtains a simple file list with the filenames on the FTP server using a wildcard starting at the current remote FTP folder
+        /// </summary>
+        /// <param name="wildcard">A wildcard to specify the filenames to be searched for and listed. Example: "subfolder/*.txt"</param>
+        /// <returns>A list with the filenames found</returns>
+        public List<string> GetFileList(string wildcard) {
+            if (wildcard == null) wildcard = "";
+            if (wildcard.Length > 0 && !wildcard.StartsWith("/")) {
+                wildcard = "/" + wildcard;
             }
             var ret = new List<string>();
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + comodin);
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + wildcard);
             req.Proxy = null;
             req.EnableSsl = false;
             req.Credentials = new NetworkCredential(User, Password);
@@ -54,28 +63,45 @@ namespace FtpUtil
             return ret;
         }
 
+        /// <summary>
+        /// Obtains a detailed list of the filenames in the current remote FTP folder
+        /// </summary>
+        /// <returns>A detailed list of files found</returns>
         public List<myFTPFileInfo> GetFileListDetailed() {
             return GetFileListDetailed("", false);
         }
 
-        public List<myFTPFileInfo> GetFileListDetailed(string comodin) {
-            return GetFileListDetailed(comodin, false);
+        /// <summary>
+        /// Obtains a detailed list of the files in the current remote FTP folder according to a wildcard filename specification
+        /// </summary>
+        /// <param name="wildcard">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
+        /// <returns>A detailed list of files found</returns>
+        /// <remarks>If wildcard is specified the resulting file list is not cached</remarks>
+        public List<myFTPFileInfo> GetFileListDetailed(string wildcard) {
+            return GetFileListDetailed(wildcard, false);
         }
 
-        public List<myFTPFileInfo> GetFileListDetailed(string comodin, bool forceRefresh) {
-            if (comodin == null) {
-                comodin = "";
+        /// <summary>
+        /// Obtains a detailed list of the files in the current remote FTP folder according to a wildcard filename specification and allows to bypass the cached filelist
+        /// </summary>
+        /// <param name="wildcard">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
+        /// <param name="forceRefresh">If true the cache is ignored</param>
+        /// <returns></returns>
+        /// <remarks>If wildcard is specified or forceRefresh is set to true the resulting file list is not cached</remarks>
+        public List<myFTPFileInfo> GetFileListDetailed(string wildcard, bool forceRefresh) {
+            if (wildcard == null) {
+                wildcard = "";
             }
-            if (comodin.Length > 0 && !comodin.StartsWith("/")) {
-                comodin = "/" + comodin;
+            if (wildcard.Length > 0 && !wildcard.StartsWith("/")) {
+                wildcard = "/" + wildcard;
             }
 
             List<myFTPFileInfo> fileList = new List<myFTPFileInfo>();
             if (forceRefresh ||
-                        comodin.Trim().Length > 0 ||
+                        wildcard.Trim().Length > 0 ||
                         _fileInfoListDirty ||
                         _lastWorkingFolderListed != _workingFolder) {
-                var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + comodin);
+                var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + wildcard);
                 req.Proxy = null;
                 req.EnableSsl = false;
                 req.Credentials = new NetworkCredential(User, Password);
@@ -93,7 +119,7 @@ namespace FtpUtil
                         };
                     };
                 };
-                if (comodin.Trim().Length == 0) {
+                if (wildcard.Trim().Length == 0) {
                     //Solo conserva cache de la lista de archivos cuando se solicita sin comodines
                     _fileInfoList = fileList;
                     _lastWorkingFolderListed = _workingFolder;
@@ -106,6 +132,12 @@ namespace FtpUtil
             }
         }
 
+        /// <summary>
+        /// Sets the current remote folder
+        /// </summary>
+        /// <param name="folder">The folder to be considered the current remote folder</param>
+        /// <returns>Allways return True</returns>
+        /// <remarks>if folder begins with '/' it starts on the root FTP folder, otherwise it is relative to current remote folder</remarks>
         public bool ChangeFolder(string folder) {
             _fileInfoListDirty = true;
             folder = folder.Trim();
@@ -131,21 +163,36 @@ namespace FtpUtil
             return true;
         }
 
+        /// <summary>
+        /// Gets the current remote folder
+        /// </summary>
+        /// <returns>The current remote folder name including the root folder</returns>
         public string GetCurrentFolder() {
             return RootFolder + _workingFolder;
         }
 
-        public bool GetFile(string archivoRemoto, string archivoLocal) {
-            string contenido = GetFileString(archivoRemoto);
+        /// <summary>
+        /// Download an FTP file and saves it on a local file
+        /// </summary>
+        /// <param name="remoteFile">The name of the remote file to be downloaded</param>
+        /// <param name="localFile">The name of the local file to where the remote file will be saved</param>
+        /// <returns>True if successful, False if error</returns>
+        public bool GetFile(string remoteFile, string localFile) {
+            string contenido = GetFileString(remoteFile);
             if (contenido != null) {
-                File.WriteAllText(archivoLocal, contenido);
+                File.WriteAllText(localFile, contenido);
                 return true;
             }
             return false;
         }
 
-        public string GetFileString(string archivoRemoto) {
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + archivoRemoto);
+        /// <summary>
+        /// Gets the contents of an FTP file
+        /// </summary>
+        /// <param name="remoteFile">The name of the remote file to be read</param>
+        /// <returns>The contents of the file or Nothing if there was an error</returns>
+        public string GetFileString(string remoteFile) {
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + remoteFile);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.DownloadFile;
@@ -155,6 +202,10 @@ namespace FtpUtil
                 return reader.ReadToEnd();
         }
 
+        /// <summary>
+        /// Calculate the time diff between local system and the FTP server
+        /// </summary>
+        /// <returns></returns>
         public System.TimeSpan GetTimeDiff() {
             string fileName = "integraasync.txt";
             DateTime current = DateTime.Now;
@@ -172,52 +223,67 @@ namespace FtpUtil
             return current - fileDateTime;
         }
 
-        public bool GetFileSize(string archivo) {
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + archivo);
+        /// <summary>
+        /// Gets the size of a file on the FTP Server (this method does not use the filelist cache)
+        /// </summary>
+        /// <param name="filename">file name</param>
+        /// <returns>The file size</returns>
+        public long GetFileSize(string filename) {
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.GetFileSize;
 
+            //TODO: get the resulting error code to report success or failure
             using (WebResponse resp = req.GetResponse())
-            using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
-                Console.WriteLine(reader.ReadToEnd());
-            return true;
+                return resp.ContentLength;
+            //using (WebResponse resp = req.GetResponse())
+            //using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
+            //    Console.WriteLine(reader.ReadToEnd());
+            //return true;
         }
 
-        public bool DeleteFile(string archivo) {
+        /// <summary>
+        /// Deletes a file on the FTP Server
+        /// </summary>
+        /// <param name="filename">File name</param>
+        /// <returns>Allways returns True</returns>
+        public bool DeleteFile(string filename) {
             _fileInfoListDirty = true;
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + archivo);
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.DeleteFile;
 
+            //TODO: get the resulting error code to report success or failure
             using (WebResponse resp = req.GetResponse())
             using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
                 Console.WriteLine(reader.ReadToEnd());
             return true;
         }
 
-        public bool RenameFile(string archivo, string nuevoNombre) {
+        public bool RenameFile(string filename, string newFilename) {
             _fileInfoListDirty = true;
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + archivo);
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.Rename;
-            req.RenameTo = nuevoNombre;
+            req.RenameTo = newFilename;
 
+            //TODO: get the resulting error code to report success or failure
             using (WebResponse resp = req.GetResponse())
             using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
                 Console.WriteLine(reader.ReadToEnd());
             return true;
         }
 
-        public DateTime GetFileDateTime(string archivo) {
+        public DateTime GetFileDateTime(string filename) {
             DateTime ret = DateTime.MinValue;
             if (getFileTimeStampNotSupported) {
-                return (GetFileDateTimeByListingFiles(archivo));
+                return (GetFileDateTimeByListingFiles(filename));
             }
 
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + archivo);
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.GetDateTimestamp;
@@ -232,7 +298,7 @@ namespace FtpUtil
                             //Al parecer el servidor no soporta el metodo para obtener la fecha de un archivo
                             // asi que usamos otro metodo
                             getFileTimeStampNotSupported = true;
-                            return (GetFileDateTimeByListingFiles(archivo));
+                            return (GetFileDateTimeByListingFiles(filename));
                         };
                         Console.WriteLine(reader.ReadToEnd());
                     }
@@ -295,28 +361,28 @@ namespace FtpUtil
             }
         }
 
-        private DateTime GetFileDateTimeByListingFiles(string archivo) {
+        private DateTime GetFileDateTimeByListingFiles(string filename) {
             DateTime ret = DateTime.MinValue;
             //Si es necesario actualiza la lista de archivos de la carpeta actual
             if (_workingFolder != _lastWorkingFolderListed || _fileInfoListDirty) {
                 GetFileListDetailed(null);
             }
             foreach (myFTPFileInfo fileInfo in _fileInfoList) {
-                if (fileInfo.Nombre.ToLower() == archivo.ToLower()) {
+                if (fileInfo.Nombre.ToLower() == filename.ToLower()) {
                     return fileInfo.Fecha;
                 }
             }
             return ret;
         }
 
-        private myFTPFileInfo GetFileInfo(string archivo) {
+        private myFTPFileInfo GetFileInfo(string filename) {
             myFTPFileInfo ret = null;
             //Si es necesario actualiza la lista de archivos de la carpeta actual
             if (_workingFolder != _lastWorkingFolderListed || _fileInfoListDirty) {
                 GetFileListDetailed(null);
             }
             foreach (myFTPFileInfo fileInfo in _fileInfoList) {
-                if (fileInfo.Nombre.ToLower() == archivo.ToLower()) {
+                if (fileInfo.Nombre.ToLower() == filename.ToLower()) {
                     return fileInfo;
                 }
             }
