@@ -16,6 +16,9 @@ namespace FtpUtil
         public string User { get; set; }
         public string Password { get; set; }
         public string RootFolder { get; set; }
+        public FtpStatusCode LastStatusCode { get; set; }
+        public string LastStatusDescription { get; set; }
+        public string LastErrorMessage { get; set; }
         private string _workingFolder = "";
         private string _lastWorkingFolderListed = null;
         private bool _fileInfoListDirty = true;
@@ -54,12 +57,14 @@ namespace FtpUtil
             req.EnableSsl = false;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.ListDirectory;
-            using (WebResponse resp = req.GetResponse())
-            using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
-                while (!reader.EndOfStream) {
-                    ret.Add(reader.ReadLine());
+            using (WebResponse resp = req.GetResponse()) {
+                using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
+                    while (!reader.EndOfStream) {
+                        ret.Add(reader.ReadLine());
+                    };
                 };
-            };
+                RecordResponseStatus((FtpWebResponse)resp);
+            }
             return ret;
         }
 
@@ -89,8 +94,8 @@ namespace FtpUtil
         /// <returns></returns>
         /// <remarks>If wildcard is specified or forceRefresh is set to true the resulting file list is not cached</remarks>
         public List<myFTPFileInfo> GetFileListDetailed(string wildcard, bool forceRefresh) {
-            if (wildcard == null) {
-                wildcard = "";
+            if (wildcard == null || wildcard.Trim().Length==0) {
+                wildcard = "*";
             }
             if (wildcard.Length > 0 && !wildcard.StartsWith("/")) {
                 wildcard = "/" + wildcard;
@@ -109,7 +114,7 @@ namespace FtpUtil
 
                 myFTPFileInfo ftpFileInfo;
                 _fileInfoList.Clear();
-                using (WebResponse resp = req.GetResponse()) {
+                using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
                     using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
                         while (!reader.EndOfStream) {
                             ftpFileInfo = new myFTPFileInfo(reader.ReadLine());
@@ -118,8 +123,9 @@ namespace FtpUtil
                             }
                         };
                     };
+                    RecordResponseStatus(resp);
                 };
-                if (wildcard.Trim().Length == 0) {
+                if (wildcard.Trim().Length == 0 || wildcard.Trim()=="/*") {
                     //Solo conserva cache de la lista de archivos cuando se solicita sin comodines
                     _fileInfoList = fileList;
                     _lastWorkingFolderListed = _workingFolder;
@@ -197,9 +203,11 @@ namespace FtpUtil
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.DownloadFile;
 
-            using (WebResponse resp = req.GetResponse())
-            using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
-                return reader.ReadToEnd();
+            using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
+                RecordResponseStatus(resp);
+                using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
+                    return reader.ReadToEnd();
+            }
         }
 
         /// <summary>
@@ -235,12 +243,10 @@ namespace FtpUtil
             req.Method = WebRequestMethods.Ftp.GetFileSize;
 
             //TODO: get the resulting error code to report success or failure
-            using (WebResponse resp = req.GetResponse())
+            using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
+                RecordResponseStatus(resp);
                 return resp.ContentLength;
-            //using (WebResponse resp = req.GetResponse())
-            //using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
-            //    Console.WriteLine(reader.ReadToEnd());
-            //return true;
+            }
         }
 
         /// <summary>
@@ -249,6 +255,7 @@ namespace FtpUtil
         /// <param name="filename">File name</param>
         /// <returns>Allways returns True</returns>
         public bool DeleteFile(string filename) {
+            bool result = false;
             _fileInfoListDirty = true;
             var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
@@ -256,13 +263,53 @@ namespace FtpUtil
             req.Method = WebRequestMethods.Ftp.DeleteFile;
 
             //TODO: get the resulting error code to report success or failure
-            using (WebResponse resp = req.GetResponse())
-            using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
-                Console.WriteLine(reader.ReadToEnd());
-            return true;
+            try {
+                using (WebResponse resp = req.GetResponse()) {
+                    RecordResponseStatus((FtpWebResponse)resp);
+                    result = (((FtpWebResponse)resp).StatusCode == FtpStatusCode.FileActionOK);
+                }
+            }
+            catch (System.Net.WebException ex) {
+                if (ex.Response is FtpWebResponse) {
+                    RecordResponseStatus((FtpWebResponse)ex.Response);
+                    result = (((FtpWebResponse)ex.Response).StatusCode == FtpStatusCode.FileActionOK);
+                }
+                else {
+                    throw ex;
+                }
+            };
+            return result;
+        }
+
+        public bool RemoveFolder(string folderName) {
+            bool result = false;
+            _fileInfoListDirty = true;
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + folderName);
+            req.Proxy = null;
+            req.Credentials = new NetworkCredential(User, Password);
+            req.Method = WebRequestMethods.Ftp.RemoveDirectory;
+
+            //TODO: get the resulting error code to report success or failure
+            try {
+                using (WebResponse resp = req.GetResponse()) {
+                    RecordResponseStatus((FtpWebResponse)resp);
+                    result = (((FtpWebResponse)resp).StatusCode == FtpStatusCode.FileActionOK);
+                }
+            }
+            catch (System.Net.WebException ex) {
+                if (ex.Response is FtpWebResponse) {
+                    RecordResponseStatus((FtpWebResponse)ex.Response);
+                    result = (((FtpWebResponse)ex.Response).StatusCode == FtpStatusCode.FileActionOK);
+                }
+                else {
+                    throw ex;
+                }
+            };
+            return result;
         }
 
         public bool RenameFile(string filename, string newFilename) {
+            bool result = false;
             _fileInfoListDirty = true;
             var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + filename);
             req.Proxy = null;
@@ -270,11 +317,11 @@ namespace FtpUtil
             req.Method = WebRequestMethods.Ftp.Rename;
             req.RenameTo = newFilename;
 
-            //TODO: get the resulting error code to report success or failure
-            using (WebResponse resp = req.GetResponse())
-            using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
-                Console.WriteLine(reader.ReadToEnd());
-            return true;
+            using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
+                RecordResponseStatus(resp);
+                result = (resp.StatusCode == FtpStatusCode.FileActionOK);
+            }
+            return result;
         }
 
         public DateTime GetFileDateTime(string filename) {
@@ -289,8 +336,9 @@ namespace FtpUtil
             req.Method = WebRequestMethods.Ftp.GetDateTimestamp;
 
             try {
-                using (WebResponse resp = req.GetResponse()) {
+                using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
                     using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
+                        RecordResponseStatus(resp);
                         try {
                             Console.WriteLine(resp.ContentType.ToString());
                         }
@@ -300,7 +348,6 @@ namespace FtpUtil
                             getFileTimeStampNotSupported = true;
                             return (GetFileDateTimeByListingFiles(filename));
                         };
-                        Console.WriteLine(reader.ReadToEnd());
                     }
                 }
             }
@@ -328,13 +375,14 @@ namespace FtpUtil
                 return UploadFileBytes(remoteFilename, fileContents);
             }
             catch (Exception ex) {
-                Console.WriteLine("Error en UploadFile:" + GetExceptionMessage(ex));
+                LastErrorMessage = "Error en UploadFile:" + GetExceptionMessage(ex);
                 return false;
             }
         }
 
         public bool UploadFileBytes(string remoteFilename, byte[] fileContents) {
             try {
+                bool result = false;
                 _fileInfoListDirty = true;
                 var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + remoteFilename);
                 req.Proxy = null;
@@ -349,14 +397,38 @@ namespace FtpUtil
                 requestStream.Close();
 
                 FtpWebResponse response = (FtpWebResponse)req.GetResponse();
+                RecordResponseStatus(response);
 
-                string responseStatus = response.StatusDescription;
+                //string responseStatus = response.StatusDescription;
+                result = (response.StatusCode == FtpStatusCode.ClosingData);
                 response.Close();
 
-                return responseStatus.StartsWith("226 ");
+                return result;
             }
             catch (Exception ex) {
-                Console.WriteLine("Error en UploadFileBytes:" + GetExceptionMessage(ex));
+                LastErrorMessage = "Error en UploadFileBytes:" + GetExceptionMessage(ex);
+                return false;
+            }
+        }
+
+        public bool CreateFolder(string newFolderName) {
+            try {
+                bool result = false;
+                _fileInfoListDirty = true;
+                var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + newFolderName);
+                req.Proxy = null;
+                req.Credentials = new NetworkCredential(User, Password);
+                req.Method = WebRequestMethods.Ftp.MakeDirectory;
+
+                FtpWebResponse response = (FtpWebResponse)req.GetResponse();
+                RecordResponseStatus(response);
+
+                result = response.StatusCode == FtpStatusCode.PathnameCreated;
+                response.Close();
+                return result;
+            }
+            catch (Exception ex) {
+                LastErrorMessage = "Error en CreateFolder \r\n" + GetExceptionMessage(ex);
                 return false;
             }
         }
@@ -396,6 +468,11 @@ namespace FtpUtil
                 ex = ex.InnerException;
             }
             return ret;
+        }
+
+        private void RecordResponseStatus(FtpWebResponse response) {
+            LastStatusCode = response.StatusCode;
+            LastStatusDescription = response.StatusDescription;
         }
     }
 
