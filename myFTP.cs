@@ -114,17 +114,27 @@ namespace FtpUtil
 
                 myFTPFileInfo ftpFileInfo;
                 _fileInfoList.Clear();
-                using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
-                    using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
-                        while (!reader.EndOfStream) {
-                            ftpFileInfo = new myFTPFileInfo(reader.ReadLine());
-                            if (ftpFileInfo.Nombre != null && ftpFileInfo.Nombre.Trim().Length > 0) {
-                                fileList.Add(ftpFileInfo);
-                            }
+                try {
+                    using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
+                        using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
+                            while (!reader.EndOfStream) {
+                                ftpFileInfo = new myFTPFileInfo(reader.ReadLine());
+                                if (ftpFileInfo.Nombre != null && ftpFileInfo.Nombre.Trim().Length > 0) {
+                                    fileList.Add(ftpFileInfo);
+                                }
+                            };
                         };
+                        RecordResponseStatus(resp);
                     };
-                    RecordResponseStatus(resp);
-                };
+                }
+                catch (System.Net.WebException ex) {
+                    if (((FtpWebResponse)ex.Response).StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable) {
+                        RecordResponseStatus((FtpWebResponse)ex.Response);
+                    }
+                    else {
+                        throw ex;
+                    }
+                }
                 if (wildcard.Trim().Length == 0 || wildcard.Trim()=="/*") {
                     //Solo conserva cache de la lista de archivos cuando se solicita sin comodines
                     _fileInfoList = fileList;
