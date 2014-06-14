@@ -291,7 +291,7 @@ namespace FtpUtil
             return result;
         }
 
-        public bool RemoveFolder(string folderName) {
+        public bool DeleteFolder(string folderName) {
             bool result = false;
             _fileInfoListDirty = true;
             var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + folderName);
