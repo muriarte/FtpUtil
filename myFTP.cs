@@ -44,15 +44,15 @@ namespace FtpUtil
         /// <summary>
         /// Obtains a simple file list with the filenames on the FTP server using a wildcard starting at the current remote FTP folder
         /// </summary>
-        /// <param name="wildcard">A wildcard to specify the filenames to be searched for and listed. Example: "subfolder/*.txt"</param>
+        /// <param name="fileSpec">A wildcard to specify the filenames to be searched for and listed. Example: "subfolder/*.txt"</param>
         /// <returns>A list with the filenames found</returns>
-        public List<string> GetFileList(string wildcard) {
-            if (wildcard == null) wildcard = "";
-            if (wildcard.Length > 0 && !wildcard.StartsWith("/")) {
-                wildcard = "/" + wildcard;
+        public List<string> GetFileList(string fileSpec) {
+            if (fileSpec == null) fileSpec = "";
+            if (fileSpec.Length > 0 && !fileSpec.StartsWith("/")) {
+                fileSpec = "/" + fileSpec;
             }
             var ret = new List<string>();
-            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + wildcard);
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + fileSpec);
             req.Proxy = null;
             req.EnableSsl = false;
             req.Credentials = new NetworkCredential(User, Password);
@@ -79,34 +79,34 @@ namespace FtpUtil
         /// <summary>
         /// Obtains a detailed list of the files in the current remote FTP folder according to a wildcard filename specification
         /// </summary>
-        /// <param name="wildcard">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
+        /// <param name="fileSpec">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
         /// <returns>A detailed list of files found</returns>
         /// <remarks>If wildcard is specified the resulting file list is not cached</remarks>
-        public List<myFTPFileInfo> GetFileListDetailed(string wildcard) {
-            return GetFileListDetailed(wildcard, false);
+        public List<myFTPFileInfo> GetFileListDetailed(string fileSpec) {
+            return GetFileListDetailed(fileSpec, false);
         }
 
         /// <summary>
         /// Obtains a detailed list of the files in the current remote FTP folder according to a wildcard filename specification and allows to bypass the cached filelist
         /// </summary>
-        /// <param name="wildcard">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
+        /// <param name="fileSpec">Wildcard filename specification. Can contain subfolders and *'s. Example: subfolder/*.txt</param>
         /// <param name="forceRefresh">If true the cache is ignored</param>
         /// <returns></returns>
         /// <remarks>If wildcard is specified or forceRefresh is set to true the resulting file list is not cached</remarks>
-        public List<myFTPFileInfo> GetFileListDetailed(string wildcard, bool forceRefresh) {
-            if (wildcard == null || wildcard.Trim().Length==0) {
-                wildcard = "*";
+        public List<myFTPFileInfo> GetFileListDetailed(string fileSpec, bool forceRefresh) {
+            if (fileSpec == null || fileSpec.Trim().Length==0) {
+                fileSpec = "*";
             }
-            if (wildcard.Length > 0 && !wildcard.StartsWith("/")) {
-                wildcard = "/" + wildcard;
+            if (fileSpec.Length > 0 && !fileSpec.StartsWith("/")) {
+                fileSpec = "/" + fileSpec;
             }
 
             List<myFTPFileInfo> fileList = new List<myFTPFileInfo>();
             if (forceRefresh ||
-                        wildcard.Trim().Length > 0 ||
+                        fileSpec.Trim().Length > 0 ||
                         _fileInfoListDirty ||
                         _lastWorkingFolderListed != _workingFolder) {
-                var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + wildcard);
+                var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + fileSpec);
                 req.Proxy = null;
                 req.EnableSsl = false;
                 req.Credentials = new NetworkCredential(User, Password);
@@ -135,7 +135,7 @@ namespace FtpUtil
                         throw ex;
                     }
                 }
-                if (wildcard.Trim().Length == 0 || wildcard.Trim()=="/*") {
+                if (fileSpec.Trim().Length == 0 || fileSpec.Trim()=="/*") {
                     //Solo conserva cache de la lista de archivos cuando se solicita sin comodines
                     _fileInfoList = fileList;
                     _lastWorkingFolderListed = _workingFolder;
