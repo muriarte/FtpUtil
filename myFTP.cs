@@ -94,7 +94,7 @@ namespace FtpUtil
         /// <returns></returns>
         /// <remarks>If wildcard is specified or forceRefresh is set to true the resulting file list is not cached</remarks>
         public List<myFTPFileInfo> GetFileListDetailed(string fileSpec, bool forceRefresh) {
-            if (fileSpec == null || fileSpec.Trim().Length==0) {
+            if (fileSpec == null || fileSpec.Trim().Length == 0) {
                 fileSpec = "*";
             }
             if (fileSpec.Length > 0 && !fileSpec.StartsWith("/")) {
@@ -135,7 +135,7 @@ namespace FtpUtil
                         throw ex;
                     }
                 }
-                if (fileSpec.Trim().Length == 0 || fileSpec.Trim()=="/*") {
+                if (fileSpec.Trim().Length == 0 || fileSpec.Trim() == "/*") {
                     //Solo conserva cache de la lista de archivos cuando se solicita sin comodines
                     _fileInfoList = fileList;
                     _lastWorkingFolderListed = _workingFolder;
@@ -193,30 +193,66 @@ namespace FtpUtil
         /// <param name="remoteFile">The name of the remote file to be downloaded</param>
         /// <param name="localFile">The name of the local file to where the remote file will be saved</param>
         /// <returns>True if successful, False if error</returns>
-        public bool GetFile(string remoteFile, string localFile) {
-            string contenido = GetFileString(remoteFile);
+        public bool GetFile(string remoteFile, string localFile, bool binaryMode) {
+            //antes lo leiamos en texto
+            //string contenido = GetFileString(remoteFile, binaryMode);
+            //if (contenido != null) {
+            //    File.WriteAllText(localFile, contenido);
+            //    return true;
+            //}
+            byte[] contenido = GetFileBinary(remoteFile);
             if (contenido != null) {
-                File.WriteAllText(localFile, contenido);
+                File.WriteAllBytes(localFile, contenido);
                 return true;
             }
             return false;
         }
 
         /// <summary>
-        /// Gets the contents of an FTP file
+        /// Gets the text contents of an FTP file
         /// </summary>
         /// <param name="remoteFile">The name of the remote file to be read</param>
         /// <returns>The contents of the file or Nothing if there was an error</returns>
-        public string GetFileString(string remoteFile) {
+        public string GetFileString(string remoteFile, bool binaryMode) {
             var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + remoteFile);
             req.Proxy = null;
             req.Credentials = new NetworkCredential(User, Password);
             req.Method = WebRequestMethods.Ftp.DownloadFile;
+            req.UseBinary = binaryMode;
 
             using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
                 RecordResponseStatus(resp);
-                using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
+                using (StreamReader reader = new StreamReader(resp.GetResponseStream())) {
                     return reader.ReadToEnd();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the binary contents of an FTP file
+        /// </summary>
+        /// <param name="remoteFile">The name of the remote file to be read</param>
+        /// <returns>The contents of the file or Nothing if there was an error</returns>
+        public byte[] GetFileBinary(string remoteFile) {
+            var req = (FtpWebRequest)WebRequest.Create("ftp://" + Server + RootFolder + _workingFolder + "/" + remoteFile);
+            req.Proxy = null;
+            req.Credentials = new NetworkCredential(User, Password);
+            req.Method = WebRequestMethods.Ftp.DownloadFile;
+            req.UseBinary = true;
+
+            using (FtpWebResponse resp = (FtpWebResponse)req.GetResponse()) {
+                RecordResponseStatus(resp);
+                byte[] buffer = new byte[32768];
+
+                using (MemoryStream ms = new MemoryStream()) {
+                    while (true) {
+                        int read = resp.GetResponseStream().Read(buffer, 0, buffer.Length);
+                        if (read <= 0) {
+                            return ms.ToArray();
+                        }
+                        ms.Write(buffer, 0, read);
+                    };
+                };
             }
         }
 
