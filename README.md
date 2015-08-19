@@ -32,6 +32,9 @@ This project exposes a `myFTP` class providing methods to do the most common fil
 - `string GetFileString(string remoteFile)`  
   _Downloads a file located on FTP Server and returns its contents as a `string`_  
 
+- `byte[] GetFileBinary(string remoteFile)`  
+  _Downloads a file located on FTP Server and returns its contents as a `byte[]` array_  
+
 - `System.TimeSpan GetTimeDiff()`  
   _Tries to calculate the time difference between the local system and the FTP Server_  
 
